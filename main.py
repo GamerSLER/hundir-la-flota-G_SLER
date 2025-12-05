@@ -43,20 +43,22 @@ for idx in [0, 1]:
             msg = msg.decode()
             partes = msg.split(":")
             if partes[0] == "COLOCAR":
-                orient = partes[2].upper()
-                x = int(partes[3])
-                y = int(partes[4])
-                barco = Barco(tipo)
                 try:
+                    tipo = partes[1]
+                    orient = partes[2].upper()
+                    x = int(partes[3])
+                    y = int(partes[4])
+
+                    barco = Barco(tipo)
                     mapas_real[jugador_actual].posicionar_barco(barco, orient, x, y)
+
                     conexion.sendto("OK".encode(), addr)
                     colocado = True
                     print(f"Jugador {jugador_actual+1} colocó un barco")
                     conexion.sendto(f"Jugador {jugador_actual+1} colocó un barco.".encode(),
                                     jugadores[1 - jugador_actual])
                 except ValueError as e:
-                    conexion.sendto(f"ERROR:{e}".encode(), addr)
-
+                    conexion.sendto(f"ERROR: Posicon inválida".encode(), addr)
             mapa_info = f"=== MAPA ENEMIGO ===\n{mapas_visible[jugador_actual].get_diseno_string()}\n=== TU MAPA ===\n{mapas_real[jugador_actual].get_diseno_string()}"
             conexion.sendto(mapa_info.encode(), addr)
 
@@ -69,21 +71,23 @@ while not game_over:
     conexion.sendto(mapa_info.encode(), jugadores[jugador_actual])
 
     msg, addr = conexion.recvfrom(1024)
-    msg = msg.decode()
-    partes = msg.split(":")
-    if partes[0] == "ATACAR":
+    msg = msg.decode().strip()
+    try:
+        partes = msg.split(":")
+        if partes[0] != "ATACAR" or len(partes) != 3:
+            raise ValueError("Formato incorrecto")
         x = int(partes[1])
         y = int(partes[2])
+        if x < 1 or x > 6 or y < 1 or y > 6:
+            raise ValueError("Coordenadas fuera de rango")
         resultado = mapas_real[jugador_enemigo].golpear(x, y)
-
         if resultado in ["TOCADO", "HUNDIDO"]:
-            mapas_visible[jugador_actual].get_mapa_oculto()[y-1][x-1] = "x"
+            mapas_visible[jugador_actual].get_mapa_oculto()[y - 1][x - 1] = "x"
         elif resultado == "AGUA":
-            mapas_visible[jugador_actual].get_mapa_oculto()[y-1][x-1] = "o"
-
+            mapas_visible[jugador_actual].get_mapa_oculto()[y - 1][x - 1] = "o"
         conexion.sendto(f"Resultado: {resultado}".encode(), jugadores[jugador_actual])
-        conexion.sendto(f"Jugador {jugador_actual+1} atacó ({x},{y}): {resultado}".encode(),
-                        jugadores[jugador_enemigo])
+    except ValueError as e:
+        conexion.sendto(f"ERROR:{e}".encode(), jugadores[jugador_actual])
 
         todos_hundidos = True
         for b in mapas_real[jugador_enemigo].get_barcos():
